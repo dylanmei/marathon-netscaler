@@ -1,0 +1,12 @@
+{
+  "id": "/example",
+  "cmd": "while :; do echo \"hello\" && sleep 100; done",
+  "labels": {
+    "netscalar.server_group": "test"
+  },
+  "instances": 1,
+  "cpus": 0.25,
+  "mem": 128,
+  "disk": 64,
+  "ports": [0]
+}
