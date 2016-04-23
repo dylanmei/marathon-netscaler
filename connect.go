@@ -2,14 +2,20 @@ package main
 
 import (
 	"crypto/tls"
-	log "github.com/Sirupsen/logrus"
-	marathon "github.com/gambol99/go-marathon"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
+	marathon "github.com/gambol99/go-marathon"
+	"github.com/gettyimages/marathon-netscaler/netscaler"
 )
+
+func netscalerConnect(netscalerUri *url.URL, quitCh <-chan os.Signal) *netscaler.Client {
+	return &netscaler.Client{}
+}
 
 func marathonConnect(marathonUri *url.URL, quitCh <-chan os.Signal) marathon.Marathon {
 	log.Printf("Connecting to Marathon at URL: %v", marathonUri)
