@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	marathon "github.com/gambol99/go-marathon"
@@ -11,6 +12,7 @@ import (
 type SyncHandler struct {
 	reader *SyncReader
 	writer *SyncWriter
+	sync   func()
 }
 
 type SyncReader struct {
@@ -22,29 +24,33 @@ type SyncWriter struct {
 }
 
 func newSyncHandler(mc marathon.Marathon, nc *netscaler.Client) *SyncHandler {
+	reader := &SyncReader{mc}
+	writer := &SyncWriter{nc}
 	return &SyncHandler{
-		reader: &SyncReader{mc},
-		writer: &SyncWriter{nc},
+		reader: reader,
+		writer: writer,
+		sync: debounce(500*time.Millisecond, func() {
+			apps, err := reader.Apps()
+			if err != nil {
+				log.Errorf("Problem finding apps to sync: %v", err)
+				return
+			}
+
+			log.Printf("Found %d apps to sync...", len(apps))
+
+			err = writer.Apps(apps)
+			if err != nil {
+				log.Errorf("Problem syncing apps: %v", err)
+				return
+			}
+
+			log.Printf("Done syncing %d apps.", len(apps))
+		}),
 	}
 }
 
 func (s *SyncHandler) Do() {
-
-	apps, err := s.reader.Apps()
-	if err != nil {
-		log.Errorf("Problem getting apps to sync: %v", err)
-		return
-	}
-
-	log.Printf("Found %d apps to sync...", len(apps))
-
-	err = s.writer.Apps(apps)
-	if err != nil {
-		log.Errorf("Problem syncing latest apps: %v", err)
-		return
-	}
-
-	log.Printf("Done syncing %d apps.", len(apps))
+	s.sync()
 }
 
 func (s *SyncHandler) Close() {
@@ -92,4 +98,49 @@ func (r *SyncReader) Apps() ([]*App, error) {
 
 func (w *SyncWriter) Apps(apps []*App) error {
 	return nil
+}
+
+func debounce(interval time.Duration, f func()) func() {
+	input := make(chan struct{})
+	timer := time.NewTimer(interval)
+
+	go func() {
+		var ok bool
+
+		// Do not start waiting for interval until called at least once
+		_, ok = <-input
+
+		// Channel closed; exit
+		if !ok {
+			return
+		}
+
+		// We start waiting for an interval
+		for {
+			select {
+
+			case <-timer.C:
+				// Interval has passed and we have a signal, so send it
+				f()
+
+				// Wait for another signal before waiting for an interval
+				_, ok = <-input
+				if !ok {
+					return
+				}
+
+				timer.Reset(interval)
+
+			case _, ok = <-input:
+				// Channel closed; exit
+				if !ok {
+					return
+				}
+			}
+		}
+	}()
+
+	return func() {
+		input <- struct{}{}
+	}
 }
