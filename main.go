@@ -41,7 +41,7 @@ func main() {
 	marathonClient := marathonConnect(marathonUri, quitCh)
 	netscalerClient := netscalerConnect(netscalerUri, quitCh)
 	syncHandler := newSyncHandler(marathonClient, netscalerClient)
-	syncHandler.Do()
+	syncHandler.Sync()
 
 	eventPump, err := newEventPump(marathonClient)
 	if err != nil {
@@ -54,7 +54,7 @@ runForever:
 		select {
 		case event := <-eventPump.Next:
 			log.Printf("Got event %s: %s", color.GreenString(event.EventType), event.AppID)
-			syncHandler.Do()
+			syncHandler.Sync()
 		case <-quitCh:
 			log.Print("Quitting...")
 			syncHandler.Close()

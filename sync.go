@@ -10,9 +10,9 @@ import (
 )
 
 type SyncHandler struct {
-	reader *SyncReader
-	writer *SyncWriter
-	sync   func()
+	reader    *SyncReader
+	writer    *SyncWriter
+	deferSync func()
 }
 
 type SyncReader struct {
@@ -24,33 +24,39 @@ type SyncWriter struct {
 }
 
 func newSyncHandler(mc marathon.Marathon, nc *netscaler.Client) *SyncHandler {
-	reader := &SyncReader{mc}
-	writer := &SyncWriter{nc}
-	return &SyncHandler{
-		reader: reader,
-		writer: writer,
-		sync: debounce(500*time.Millisecond, func() {
-			apps, err := reader.Apps()
-			if err != nil {
-				log.Errorf("Problem finding apps to sync: %v", err)
-				return
-			}
-
-			log.Printf("Found %d apps to sync...", len(apps))
-
-			err = writer.Apps(apps)
-			if err != nil {
-				log.Errorf("Problem syncing apps: %v", err)
-				return
-			}
-
-			log.Printf("Done syncing %d apps.", len(apps))
-		}),
+	handler := &SyncHandler{
+		reader: &SyncReader{mc},
+		writer: &SyncWriter{nc},
 	}
+	handler.deferSync = debounce(500*time.Millisecond, func() {
+		err := handler.syncNow()
+		if err != nil {
+			log.Errorf("Problem syncing apps: %v", err)
+		}
+	})
+
+	return handler
 }
 
-func (s *SyncHandler) Do() {
-	s.sync()
+func (s *SyncHandler) Sync() {
+	s.deferSync()
+}
+
+func (s *SyncHandler) syncNow() error {
+	apps, err := s.reader.Apps()
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Found %d apps to sync...", len(apps))
+
+	err = s.writer.Apps(apps)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Done syncing %d apps.", len(apps))
+	return nil
 }
 
 func (s *SyncHandler) Close() {
