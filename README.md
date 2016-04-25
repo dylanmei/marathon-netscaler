@@ -7,7 +7,7 @@ Interact with [NetScaler](https://www.citrix.com/products/netscaler-application-
 
 ```
 make
-bin/marathon-netscaler bin/marathon-netscaler -marathon.uri=http://marathon:8080 -netscaler.uri=http://netscaler
+bin/marathon-netscaler -marathon.uri=http://marathon:8080 -netscaler.uri=http://netscaler
 ```
 
 ## using marathon-netscaler
