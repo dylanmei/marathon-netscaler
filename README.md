@@ -17,6 +17,7 @@ Deploy your app to Marathon with a custom label called `netscaler.service_group`
 ```
 {
   "id": "/example",
+  "ports": [9090],
   "labels": {
     "netscaler.service_group": "example"
   }
@@ -28,7 +29,7 @@ Deploy your app to Marathon with a custom label called `netscaler.service_group`
 This is a work in progress.
 
 - Update NetScaler
-- Honor a Marathon label that specifies which app port index to use; currently assumes the first port
 - Add a cli argument that supplies a custom label prefix; i.e. `dev_netscaler.service_group` instead of `netscaler.service_group`
+- Add a cli argument that supplies a custom NetScaler server-name prefix for Mesos agents; i.e. `dev_marathon-agent.hostname.com` instead of `marathon-agent.hostname.come`
 - One or more metrics collection thingies
 - A cool name

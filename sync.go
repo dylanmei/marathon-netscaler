@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"strconv"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -71,6 +71,9 @@ func (r *SyncReader) Apps() ([]*App, error) {
 		if app.Labels == nil {
 			continue
 		}
+		if len(app.Ports) == 0 {
+			continue
+		}
 
 		labels := *app.Labels
 		serverGroup, ok := labels["netscaler.service_group"]
@@ -78,10 +81,24 @@ func (r *SyncReader) Apps() ([]*App, error) {
 			continue
 		}
 
+		serverPort := app.Ports[0]
+		if s, ok := labels["netscaler.server_port"]; ok {
+			p, err := strconv.Atoi(s)
+			if err != nil {
+				continue
+			}
+
+			serverPort = p
+		}
+		if serverPort < 1 {
+			continue
+		}
+
 		results = append(results, &App{
 			ID:           app.ID,
 			ServiceGroup: serverGroup,
-			Addrs:        []string{},
+			Port:         serverPort,
+			Agents:       []Agent{},
 		})
 	}
 
@@ -94,8 +111,8 @@ func (r *SyncReader) Apps() ([]*App, error) {
 				continue
 			}
 
-			res.Addrs = append(res.Addrs,
-				fmt.Sprintf("%s:%d", task.Host, task.Ports[0]))
+			res.Agents = append(res.Agents,
+				Agent{task.SlaveID, task.Host})
 		}
 	}
 

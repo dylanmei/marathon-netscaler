@@ -21,11 +21,18 @@ func Test_sync_reader(t *testing.T) {
 			fmt.Fprintf(w, `{
 				"apps": [{
 					"id": "/service-with-one-port",
+					"ports": [123],
 					"labels": {
 						"netscaler.service_group": "foo"
 					}
 				}, {
-					"id": "/service-without-label"
+					"id": "/service-without-label",
+					"ports": [0]
+				}, {
+					"id": "/service-without-port",
+					"labels": {
+						"netscaler.service_group": "bar"
+					}
 				}]
 			}`)
 		})
@@ -35,13 +42,21 @@ func Test_sync_reader(t *testing.T) {
 				"tasks": [{
 					"id": "task-1",
 					"appId": "/service-with-one-port",
+					"slaveId": "agent-1",
 					"host": "host-1",
-					"ports": [4567]
+					"ports": [123]
 				}, {
 					"id": "task-2",
 					"appId": "/service-without-label",
+					"slaveId": "agent-1",
 					"host": "host-1",
-					"ports": [5678]
+					"ports": [456]
+				}, {
+					"id": "task-3",
+					"appId": "/service-without-port",
+					"slaveId": "agent-1",
+					"host": "host-1",
+					"ports": []
 				}]
 			}`)
 		})
@@ -63,6 +78,8 @@ func Test_sync_reader(t *testing.T) {
 	assert.Equal("/service-with-one-port", app.ID)
 	assert.Equal("foo", app.ServiceGroup)
 
-	assert.Equal(1, len(app.Addrs))
-	assert.Equal("host-1:4567", app.Addrs[0])
+	assert.Equal(1, len(app.Agents))
+	agent := app.Agents[0]
+	assert.Equal("agent-1", agent.ID)
+	assert.Equal("host-1", agent.Host)
 }
