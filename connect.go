@@ -14,7 +14,31 @@ import (
 )
 
 func netscalerConnect(netscalerUri *url.URL, quitCh <-chan os.Signal) *netscaler.Client {
-	return &netscaler.Client{}
+	log.Printf("Connecting to NetScaler at URL: %v", netscalerUri)
+	client, err := newNetscalerClient(netscalerUri)
+
+	if err != nil {
+		log.Debug(err.Error())
+		for {
+			select {
+			case <-quitCh:
+				log.Println("Quitting.")
+				os.Exit(0)
+
+			case <-time.After(10 * time.Second):
+				log.Print("Retrying NetScaler...")
+				client, err = newNetscalerClient(netscalerUri)
+
+				if err == nil {
+					break
+				}
+
+				log.Debug(err.Error())
+			}
+		}
+	}
+
+	return client
 }
 
 func marathonConnect(marathonUri *url.URL, quitCh <-chan os.Signal) marathon.Marathon {
@@ -27,9 +51,11 @@ func marathonConnect(marathonUri *url.URL, quitCh <-chan os.Signal) marathon.Mar
 			case <-quitCh:
 				log.Println("Quitting.")
 				os.Exit(0)
+
 			case <-time.After(10 * time.Second):
 				log.Print("Retrying Marathon...")
 				client, err = newMarathonClient(marathonUri)
+
 				if err == nil {
 					break
 				}
@@ -38,21 +64,18 @@ func marathonConnect(marathonUri *url.URL, quitCh <-chan os.Signal) marathon.Mar
 		}
 	}
 
-	info, _ := client.Info()
-	log.Printf("Connected to Marathon! Name=%s, Version=%s\n", info.Name, info.Version)
-
 	return client
 }
 
-func newMarathonClient(uri *url.URL) (marathon.Marathon, error) {
-	config := marathon.NewDefaultConfig()
-	config.URL = uri.String()
-	config.EventsTransport = marathon.EventsTransportSSE
+func newNetscalerClient(uri *url.URL) (*netscaler.Client, error) {
+	config := &netscaler.Config{
+		URL: uri.String(),
+	}
 
 	if uri.User != nil {
-		if passwd, ok := uri.User.Password(); ok {
-			config.HTTPBasicPassword = passwd
-			config.HTTPBasicAuthUser = uri.User.Username()
+		config.HTTPBasicAuthUser = uri.User.Username()
+		if pass, ok := uri.User.Password(); ok {
+			config.HTTPBasicPassword = pass
 		}
 	}
 	config.HTTPClient = &http.Client{
@@ -67,5 +90,49 @@ func newMarathonClient(uri *url.URL) (marathon.Marathon, error) {
 		},
 	}
 
-	return marathon.NewClient(config)
+	client := netscaler.NewClient(config)
+	version, err := client.Version()
+
+	if err == nil {
+		log.Printf("Connected to NetScaler! Version=%s\n", version)
+	}
+
+	return client, err
+}
+
+func newMarathonClient(uri *url.URL) (marathon.Marathon, error) {
+	config := marathon.NewDefaultConfig()
+	config.URL = uri.String()
+	config.EventsTransport = marathon.EventsTransportSSE
+
+	if uri.User != nil {
+		config.HTTPBasicAuthUser = uri.User.Username()
+		if pass, ok := uri.User.Password(); ok {
+			config.HTTPBasicPassword = pass
+		}
+	}
+	config.HTTPClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout: 10 * time.Second,
+			}).Dial,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	client, err := marathon.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := client.Info()
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Connected to Marathon! Name=%s, Version=%s\n", info.Name, info.Version)
+	return client, nil
 }
