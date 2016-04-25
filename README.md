@@ -7,7 +7,7 @@ Interact with [NetScaler](https://www.citrix.com/products/netscaler-application-
 
 ```
 make
-bin/marathon-netscaler bin/marathon-netscaler -log.level=debug -marathon.uri=http://marathon:8080 -netscaler.uri=http://netscaler
+bin/marathon-netscaler bin/marathon-netscaler -marathon.uri=http://marathon:8080 -netscaler.uri=http://netscaler
 ```
 
 ## using marathon-netscaler
@@ -30,6 +30,6 @@ This is a work in progress.
 
 - Update NetScaler
 - Add a cli argument that supplies a custom label prefix; i.e. `dev_netscaler.service_group` instead of `netscaler.service_group`
-- Add a cli argument that supplies a custom NetScaler server-name prefix for Mesos agents; i.e. `dev_marathon-agent.hostname.com` instead of `marathon-agent.hostname.come`
+- Add a cli argument that supplies a custom NetScaler server-name prefix for Mesos agents; i.e. `dev_marathon-agent.hostname.com` instead of `marathon-agent.hostname.com`
 - One or more metrics collection thingies
 - A cool name
