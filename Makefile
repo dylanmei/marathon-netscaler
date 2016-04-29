@@ -8,7 +8,7 @@ deps:
 	go get -v -u ./...
 
 test:
-	go test -v -run=$(RUN) $(TEST)
+	go test -v -cover -run=$(RUN) $(TEST)
 
 build: clean
 	go build -v -o bin/$(TARGET)
