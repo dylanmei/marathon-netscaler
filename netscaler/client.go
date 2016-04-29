@@ -1,12 +1,14 @@
 package netscaler
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"strings"
+	"net/url"
 
 	jp "github.com/buger/jsonparser"
 )
@@ -24,9 +26,9 @@ type Client struct {
 	version    string
 }
 
-type Server struct {
-	Name string
-	IP   string
+type Resource interface {
+	ResourceName() string
+	ResourceType() string
 }
 
 func NewClient(config *Config) *Client {
@@ -70,56 +72,23 @@ func (c *Client) Version() (string, error) {
 	return c.version, err
 }
 
-func (c *Client) GetServers() ([]Server, error) {
-	servers := []Server{}
-	req, err := c.request("GET", "config/server", nil)
+func (c *Client) create(resource Resource) error {
+	var buffer []byte
+	buffer, err := json.Marshal(&resource)
 	if err != nil {
-		return servers, err
+		return err
 	}
 
-	res, err := c.httpClient.Do(req)
+	resourceType := resource.ResourceType()
+	apiQuery := fmt.Sprintf("config/%s", resourceType)
+
+	req, err := c.request("POST", apiQuery, bytes.NewReader(buffer))
 	if err != nil {
-		return servers, err
+		return err
 	}
 
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return servers, err
-	}
-
-	if res.StatusCode != 200 {
-		return servers, errors.New(fmt.Sprintf("Unexpected HTTP status: %d", res.StatusCode))
-	}
-
-	err = jp.ArrayEach(body, func(value []byte, dataType jp.ValueType, offset int, err error) {
-		name, err := jp.GetString(value, "name")
-		if err != nil {
-			return
-		}
-		ip, err := jp.GetString(value, "ipaddress")
-		if err != nil {
-			return
-		}
-		servers = append(servers, Server{
-			Name: name,
-			IP:   ip,
-		})
-	}, "server")
-
-	return servers, err
-}
-
-func (c *Client) AddServers(servers ...Server) error {
-	list := []string{}
-	for _, server := range servers {
-		list = append(list,
-			fmt.Sprintf(`{"name": "%s", "ipaddress": "%s"}`, server.Name, server.IP))
-	}
-
-	req, err := c.request("POST", "config/server",
-		strings.NewReader(fmt.Sprintf(`{"server": [%s]}`, strings.Join(list, ","))))
-	req.Header.Set("Content-Type", "application/vnd.com.citrix.netscaler.server_list+json")
+	contentType := fmt.Sprintf("application/vnd.com.citrix.netscaler.%s+json", resourceType)
+	req.Header.Set("Content-Type", contentType)
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -133,24 +102,69 @@ func (c *Client) AddServers(servers ...Server) error {
 	return nil
 }
 
-func (c *Client) RemoveServers(names ...string) error {
-	for _, name := range names {
-		req, err := c.request("DELETE", fmt.Sprintf("config/server/%s", name), nil)
-		if err != nil {
-			return err
-		}
+func (c *Client) delete(resourceName, resourceType string) error {
+	apiQuery := fmt.Sprintf("config/%s/%s", resourceType, resourceName)
 
-		res, err := c.httpClient.Do(req)
-		if err != nil {
-			return err
-		}
+	req, err := c.request("DELETE", apiQuery, nil)
+	if err != nil {
+		return err
+	}
 
-		if res.StatusCode != 200 {
-			return errors.New(fmt.Sprintf("Unexpected HTTP status: %d while deleting %s", res.StatusCode, name))
-		}
+	contentType := fmt.Sprintf("application/vnd.com.citrix.netscaler.%s+json", resourceType)
+	req.Header.Set("Content-Type", contentType)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 200 {
+		return errors.New(fmt.Sprintf("Unexpected HTTP status: %d", res.StatusCode))
 	}
 
 	return nil
+}
+
+func (c *Client) query(resourceType, filter string, result interface{}) error {
+	uriParams := ""
+	if filter != "" {
+		uriParams = "?filter=" + url.QueryEscape(filter)
+	}
+
+	apiQuery := fmt.Sprintf("config/%s%s", resourceType, uriParams)
+	req, err := c.request("GET", apiQuery, nil)
+	if err != nil {
+		return err
+	}
+
+	contentType := fmt.Sprintf("application/vnd.com.citrix.netscaler.%s+json", resourceType)
+	req.Header.Set("Content-Type", contentType)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode >= 200 && res.StatusCode <= 299 {
+		if res.StatusCode == 400 {
+			return nil
+		}
+
+		data, _, _, err := jp.Get(body, resourceType)
+		if err != nil {
+			return err
+		}
+
+		return json.Unmarshal(data, result)
+	}
+
+	return errors.New(fmt.Sprintf("Unexpected HTTP status: %d", res.StatusCode))
 }
 
 func (c *Client) request(method, path string, body io.Reader) (*http.Request, error) {
