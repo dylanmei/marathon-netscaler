@@ -26,11 +26,6 @@ type Client struct {
 	version    string
 }
 
-type Resource interface {
-	ResourceName() string
-	ResourceType() string
-}
-
 func NewClient(config *Config) *Client {
 	httpClient := http.DefaultClient
 	if config.HTTPClient != nil {
@@ -72,16 +67,14 @@ func (c *Client) Version() (string, error) {
 	return c.version, err
 }
 
-func (c *Client) create(resource Resource) error {
+func (c *Client) create(resourceType string, resource interface{}) error {
 	var buffer []byte
 	buffer, err := json.Marshal(&resource)
 	if err != nil {
 		return err
 	}
 
-	resourceType := resource.ResourceType()
 	apiQuery := fmt.Sprintf("config/%s", resourceType)
-
 	req, err := c.request("POST", apiQuery, bytes.NewReader(buffer))
 	if err != nil {
 		return err
@@ -102,7 +95,7 @@ func (c *Client) create(resource Resource) error {
 	return nil
 }
 
-func (c *Client) delete(resourceName, resourceType string) error {
+func (c *Client) delete(resourceType, resourceName string) error {
 	apiQuery := fmt.Sprintf("config/%s/%s", resourceType, resourceName)
 
 	req, err := c.request("DELETE", apiQuery, nil)
